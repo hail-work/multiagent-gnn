@@ -125,7 +125,11 @@ while True:
         else:
             next_obs = None
 
-        reward = reward - t*1e-3
+        # find that is not 0 in action
+        valid_action = (action != 0).sum()
+
+        # 정확히는 가만히 있는게 아닌 경우에만 reward를 디스카운트해야함
+        reward = reward - valid_action*1e-3
 
         total_reward += reward.sum()
 
@@ -152,7 +156,7 @@ while True:
         t += 1
         donedone = np.stack(done.values())
         trunctrunc = np.stack(truncated.values())
-        if np.all(donedone) or np.all(trunctrunc) or (t>max_steps-1):
+        if np.any(donedone) or np.all(trunctrunc) or (t>max_steps-1):
             # print('done: {} {} {} {} {}'.format(*done))
             # print('truncated: {} {} {} {} {}'.format(*truncated))
             obs = world.reset()
