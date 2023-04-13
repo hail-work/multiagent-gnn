@@ -64,6 +64,7 @@ world.reset()
 n_agents = len(world.agents)
 n_states = np.prod(world.observation_space('omnivore_0').shape) #TODO 이것도 수정했습니다.
 n_actions = world.action_space('omnivore_0').n
+t = 0
 
 win = None
 param = None
@@ -87,7 +88,6 @@ while True:
     total_c_loss = np.nan
     total_a_loss = np.nan
     rr = np.zeros((n_agents,))
-    t = 0
     while True:
         log = {}
         # render every 100 episodes to speed up training
@@ -128,7 +128,6 @@ while True:
         reward = reward - t*1e-3
 
         total_reward += reward.sum()
-        rr += reward.cpu().numpy()
 
         magent.memory.push(obs, action, next_obs, reward)
         obs = next_obs
@@ -151,8 +150,9 @@ while True:
         wandb.log(log)
 
         t += 1
-
-        if done or truncated or (t>max_steps-1):
+        donedone = np.stack(done.values())
+        trunctrunc = np.stack(truncated.values())
+        if np.all(donedone) or np.all(trunctrunc) or (t>max_steps-1):
             # print('done: {} {} {} {} {}'.format(*done))
             # print('truncated: {} {} {} {} {}'.format(*truncated))
             obs = world.reset()
