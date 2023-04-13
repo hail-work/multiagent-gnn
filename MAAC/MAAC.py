@@ -104,7 +104,12 @@ class MAAC:
             target_Q = th.zeros(
                 self.batch_size).type(FloatTensor)                         # Target- Network 에서 온 Q-value
 
-            target_Q[non_final_mask] = self.critics_target[agent](
+            # target_Q[non_final_mask] = self.critics_target[agent](
+            #     non_final_next_states.view(-1, self.n_agents * self.n_states),
+            #     non_final_next_actions.view(-1,
+            #                                 self.n_agents * self.n_actions)
+            # ).squeeze()
+            target_Q[non_final_mask] = self.critics_target(
                 non_final_next_states.view(-1, self.n_agents * self.n_states),
                 non_final_next_actions.view(-1,
                                             self.n_agents * self.n_actions)

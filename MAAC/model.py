@@ -19,6 +19,8 @@ class Critic(nn.Module):
 
     # obs: batch_size * obs_dim
     def forward(self, obs, acts):
+        # flatten obs
+        obs = obs.view(-1, self.n_agent * self.dim_observation)
         result = F.relu(self.FC1(obs))
         combined = th.cat([result, acts], 1)
         result = F.relu(self.FC2(combined))
@@ -40,15 +42,32 @@ class Actor(nn.Module):
         return result
 
 
+class PerceptGNN(nn.Module):
+    def __init__(self, dim_observation, dim_embedding):
+        super(PerceptGNN, self).__init__()
+        self.FC1 = nn.Linear(dim_observation, 500)
+        self.FC2 = nn.Linear(500, 128)
+        self.FC3 = nn.Linear(128, dim_embedding)
+
+    # action output between -2 and 2
+    def forward(self, obs):
+        result = F.relu(self.FC1(obs))
+        result = F.relu(self.FC2(result))
+        result = F.softmax(self.FC3(result))
+        return result
+
 class ActorMAAC(nn.Module):
     def __init__(self, dim_observation, dim_action):
         super(ActorMAAC, self).__init__()
+        self.dim_observation = dim_observation
         self.FC1 = nn.Linear(dim_observation, 500)
         self.FC2 = nn.Linear(500, 128)
         self.FC3 = nn.Linear(128, dim_action)
 
     # action output between -2 and 2
     def forward(self, obs):
+        # flatten obs
+        obs = obs.view(-1, self.dim_observation)
         result = F.relu(self.FC1(obs))
         result = F.relu(self.FC2(result))
         result = F.softmax(self.FC3(result))
