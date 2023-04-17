@@ -131,7 +131,7 @@ while True:
         # 정확히는 가만히 있는게 아닌 경우에만 reward를 디스카운트해야함
         reward = reward - valid_action*1e-3
 
-        total_reward += reward.sum()
+        total_reward += reward.sum().detach().numpy()
 
         magent.memory.push(obs, action, next_obs, reward)
         obs = next_obs
@@ -141,14 +141,18 @@ while True:
             if np.isnan(total_c_loss):
                 total_c_loss = 0
                 total_a_loss = 0
+                total_c_loss += sum(c_loss).item()
+                total_a_loss += sum(a_loss).item()
+            else:
+                total_c_loss += sum(c_loss).item()
+                total_a_loss += sum(a_loss).item()
 
-                total_c_loss += c_loss
-                total_a_loss += a_loss
+            log['t/c_loss'] = sum(c_loss).item()
+            log['t/a_loss'] = sum(a_loss).item()
+
 
         # add reward, c_loss, a_loss to log
         log['t/reward'] = reward.sum()
-        log['t/c_loss'] = c_loss
-        log['t/a_loss'] = a_loss
         if reward.sum() >0:
             print('reward: ', reward.sum())
         wandb.log(log)
