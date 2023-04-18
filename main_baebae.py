@@ -7,6 +7,7 @@ import wandb
 from gym.envs.registration import register
 import gym
 import argparse
+import cv2
 
 register(
 	id='multigrid-soccer-v0',
@@ -19,14 +20,14 @@ register(
 )
 
 # do not render the scene
-e_render = False
+e_render = True
 
 food_reward = 10.
 poison_reward = -1.
 encounter_reward = 0.01
 n_coop = 2
 
-env_name = 'multigrid-soccer-v0'
+env_name = 'multigrid-collect-v0'
 
 world = gym.make(env_name)
 
@@ -39,7 +40,7 @@ th.manual_seed(1234)
 parser = argparse.ArgumentParser(description=None)
 parser.add_argument('--n-agents', default=len(world.agents), type=int)
 parser.add_argument('--n-states', default=np.prod(world.observation_space.shape), type=int)
-parser.add_argument('--n-actions', default=world.action_space.n, type=int)
+parser.add_argument('--n-actions', default=7, type=int)
 parser.add_argument('--capacity', default=1000000, type=int)
 parser.add_argument('--batch-size', default=1000, type=int)
 parser.add_argument('--n-episode', default=int(3e6), type=int)
@@ -79,20 +80,37 @@ wandb.run.name = f"baebaerun_maac"
 
 FloatTensor = th.cuda.FloatTensor if maddpg.use_cuda else th.FloatTensor
 # for i_episode in range(n_episode):
-i_episode = 0
+i_episode = -1
 while True:
 	obs = world.reset()
 	obs = np.stack(obs)
 	if isinstance(obs, np.ndarray):
 		obs = th.from_numpy(obs).float()
+
+	total_reward_idx = np.zeros(3)
 	total_reward = 0.0
+
+	total_c_loss = np.nan
+	total_a_loss = np.nan
 	rr = np.zeros((n_agents,))
 	t = 0
+
+	# open a file that named "video_{i_episode}.mp4" and to save video
+	if (i_episode+1) % 100 == 0 and e_render:
+		# Create a VideoWriter object
+		fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # codec
+		out = cv2.VideoWriter(f'output_{i_episode}.mp4', fourcc, 20.0, (640, 480))  # output file name, codec, fps, resolution
+
+
 	while True:
 		log = {}
-		# render every 100 episodes to speed up training
-		if i_episode % 20 == 0 and e_render:
-			world.render()
+
+		# save video for every 100 episodes
+		if (i_episode+1) % 100 == 0 and e_render:
+			frame = world.render()
+			# write a video frame to out file
+			out.write(frame)
+
 		obs = obs.type(FloatTensor)
 		# TODO: action space 어떻게 구성된거임
 		# action = maddpg.select_action(obs).data.cpu()
@@ -104,6 +122,23 @@ while True:
 
 		obs_, reward, done, _ = world.step(actions)
 		# obs_, reward, done, _ = world.step((action*0.01).numpy())
+		total_reward_idx+=reward
+		if reward.sum() != 0:
+			# fancy print
+			print("reward: ", reward)
+			if reward.sum()>1:
+				print("reward sum: ", reward.sum())
+				print("wow")
+		# argmax of actions
+		done_actions = np.all(actions==6)
+		if done_actions:
+			done = True
+			# if they decided to finish the episode before the best possible reward
+			if total_reward_idx.sum() != len(world.agents)*2:
+				reward -= 2
+			else:
+				pass
+
 
 		reward = np.stack(reward)
 		reward = th.from_numpy(reward).float()
@@ -116,7 +151,7 @@ while True:
 			next_obs = None
 
 		# subtract reward with t*1e-3
-		reward = reward - t * 1e-3
+		reward = reward - t * 1e-8
 
 		total_reward += reward.sum()
 		rr += reward.cpu().numpy()
@@ -128,16 +163,35 @@ while True:
 		obs = next_obs
 
 		c_loss, a_loss = maddpg.update_policy()
+		if c_loss is not None:
+			if np.isnan(total_c_loss):
+				total_c_loss = 0
+				total_a_loss = 0
+				total_c_loss += sum(c_loss).item()
+				total_a_loss += sum(a_loss).item()
+			else:
+				total_c_loss += sum(c_loss).item()
+				total_a_loss += sum(a_loss).item()
+
+			log['t/c_loss'] = sum(c_loss).item()
+			log['t/a_loss'] = sum(a_loss).item()
 
 		# add reward, c_loss, a_loss to log
 		log['t/reward'] = reward.sum()
-		log['t/c_loss'] = c_loss
-		log['t/a_loss'] = a_loss
 		if reward.sum() > 0:
 			print('reward: ', reward.sum())
 		wandb.log(log)
 
+		# add reward, c_loss, a_loss to log
+		log['t/reward'] = reward.sum()
+		# if reward.sum() > 0:
+		# 	print('reward: ', reward.sum())
+		wandb.log(log)
+
 		t += 1
+
+		if t>int(1e4):
+			print('truncated')
 
 		if done or (t > max_steps - 1):
 			obs = world.reset()
@@ -149,11 +203,20 @@ while True:
 			# print('truncated: {} {} {} {} {}'.format(*truncated))
 			break
 
+	# open a file that named "video_{i_episode}.mp4" and to save video
+	if (i_episode+1) % 100 == 0 and e_render:
+		# Release the resources
+		out.release()
+		cv2.destroyAllWindows()
+		# empty Capture object
+
 	maddpg.episode_done += 1
 	print('Episode: %d, reward = %f' % (i_episode, total_reward))
 	reward_record.append(total_reward)
 	log['episode/reward'] = reward.sum()
 	log['episode/tot_reward'] = total_reward
+	log['episode/c_loss']=total_c_loss
+	log['episode/a_loss']=total_a_loss
 	wandb.log(log)
 	if maddpg.episode_done == maddpg.episodes_before_train:
 		print('training now begins...')

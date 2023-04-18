@@ -4,7 +4,7 @@ import numpy as np
 import torch as th
 
 from pettingzoo.sisl import pursuit_v4
-from magent2.environments import gather_v4, gather_v5
+from magent2.environments import gather_v4, gather_v5, adversarial_pursuit_v4
 
 import wandb
 
@@ -28,6 +28,10 @@ th.manual_seed(1234)
 world = gather_v5.env(minimap_mode=False, step_reward=-0.01, attack_penalty=-0.1,
 dead_penalty=-1, attack_food_reward=0.5, max_cycles=500, extra_features=False)
 world.reset(seed = 1)
+
+world = adversarial_pursuit_v4.env(map_size=10, minimap_mode=False, tag_penalty=-0.2,
+max_cycles=500, extra_features=False)
+
 # world.render()
 
 
