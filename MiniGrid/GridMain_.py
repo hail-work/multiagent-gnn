@@ -33,7 +33,7 @@ encounter_reward = 0.01
 n_coop = 2
 
 
-world =  gym.make('multigrid-soccer-v0')
+world = gym.make('multigrid-soccer-v0')
 
 # vis = visdom.Visdom(port=5274)
 reward_record = []

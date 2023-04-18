@@ -1,4 +1,4 @@
-from .model import Critic, ActorMAAC
+from .model import Critic, Actor
 import torch as th
 from copy import deepcopy
 from .memory import ReplayMemory, Experience
@@ -22,12 +22,12 @@ def hard_update(target, source):
         target_param.data.copy_(source_param.data)
 
 
-class MAAC:
+class MADDPG:
     def __init__(self, n_agents, dim_obs, dim_act, batch_size,
-                 capacity, episodes_before_train, epsilon=0.1):
-        self.actors = [ActorMAAC(dim_obs, dim_act) for i in range(n_agents)]
-        self.critics =Critic(n_agents, dim_obs,
-                               dim_act)
+                 capacity, episodes_before_train):
+        self.actors = [Actor(dim_obs, dim_act) for i in range(n_agents)]
+        self.critics = [Critic(n_agents, dim_obs,
+                               dim_act) for i in range(n_agents)]
         self.actors_target = deepcopy(self.actors)
         self.critics_target = deepcopy(self.critics)
 
@@ -41,11 +41,10 @@ class MAAC:
 
         self.GAMMA = 0.95
         self.tau = 0.01
-        self.epsilon = epsilon
 
         self.var = [1.0 for i in range(n_agents)]
-        self.critic_optimizer = Adam(self.critics.parameters(),
-                                      lr=0.001)
+        self.critic_optimizer = [Adam(x.parameters(),
+                                      lr=0.001) for x in self.critics]
         self.actor_optimizer = [Adam(x.parameters(),
                                      lr=0.0001) for x in self.actors]
 
@@ -70,17 +69,17 @@ class MAAC:
         ByteTensor = th.cuda.ByteTensor if self.use_cuda else th.ByteTensor
         FloatTensor = th.cuda.FloatTensor if self.use_cuda else th.FloatTensor
 
-        c_loss = []     # Critic loss
-        a_loss = []     # Actor loss
+        c_loss = []
+        a_loss = []
         for agent in range(self.n_agents):
-            transitions = self.memory.sample(self.batch_size)       # transition Data
+            transitions = self.memory.sample(self.batch_size)
             batch = Experience(*zip(*transitions))
             non_final_mask = ByteTensor(list(map(lambda s: s is not None,
                                                  batch.next_states)))
-            # state_batch: batch_size x n_agents x dim_obs            # transition Data 에서 batch_size 만큼 추출
-            state_batch = th.stack(batch.states).type(FloatTensor)    # state
-            action_batch = th.stack(batch.actions).type(FloatTensor)  # action
-            reward_batch = th.stack(batch.rewards).type(FloatTensor)  # reward
+            # state_batch: batch_size x n_agents x dim_obs
+            state_batch = th.stack(batch.states).type(FloatTensor)
+            action_batch = th.stack(batch.actions).type(FloatTensor)
+            reward_batch = th.stack(batch.rewards).type(FloatTensor)
             # : (batch_size_non_final) x n_agents x dim_obs
             non_final_next_states = th.stack(
                 [s for s in batch.next_states
@@ -89,8 +88,8 @@ class MAAC:
             # for current agent
             whole_state = state_batch.view(self.batch_size, -1)
             whole_action = action_batch.view(self.batch_size, -1)
-            self.critic_optimizer.zero_grad()
-            current_Q = self.critics(whole_state, whole_action)      # Critic에서 온 Q-value
+            self.critic_optimizer[agent].zero_grad()
+            current_Q = self.critics[agent](whole_state, whole_action)
 
             non_final_next_actions = [
                 self.actors_target[i](non_final_next_states[:,
@@ -103,14 +102,9 @@ class MAAC:
                                                  1).contiguous())
 
             target_Q = th.zeros(
-                self.batch_size).type(FloatTensor)                         # Target- Network 에서 온 Q-value
+                self.batch_size).type(FloatTensor)
 
-            # target_Q[non_final_mask] = self.critics_target[agent](
-            #     non_final_next_states.view(-1, self.n_agents * self.n_states),
-            #     non_final_next_actions.view(-1,
-            #                                 self.n_agents * self.n_actions)
-            # ).squeeze()
-            target_Q[non_final_mask] = self.critics_target(
+            target_Q[non_final_mask] = self.critics_target[agent](
                 non_final_next_states.view(-1, self.n_agents * self.n_states),
                 non_final_next_actions.view(-1,
                                             self.n_agents * self.n_actions)
@@ -120,17 +114,17 @@ class MAAC:
             target_Q = (target_Q.unsqueeze(1) * self.GAMMA) + (
                 reward_batch[:, agent].unsqueeze(1) * scale_reward)
 
-            loss_Q = nn.MSELoss()(current_Q, target_Q.detach())            # Critic-Loss
+            loss_Q = nn.MSELoss()(current_Q, target_Q.detach())
             loss_Q.backward()
-            self.critic_optimizer.step()
+            self.critic_optimizer[agent].step()
 
-            self.actor_optimizer[agent].zero_grad()                  # Actor 학습
+            self.actor_optimizer[agent].zero_grad()
             state_i = state_batch[:, agent, :]
             action_i = self.actors[agent](state_i)
             ac = action_batch.clone()
             ac[:, agent, :] = action_i
             whole_action = ac.view(self.batch_size, -1)
-            actor_loss = -self.critics(whole_state, whole_action)
+            actor_loss = -self.critics[agent](whole_state, whole_action)
             actor_loss = actor_loss.mean()
             actor_loss.backward()
             self.actor_optimizer[agent].step()
@@ -138,8 +132,8 @@ class MAAC:
             a_loss.append(actor_loss)
 
         if self.steps_done % 100 == 0 and self.steps_done > 0:
-            soft_update(self.critics_target, self.critics, self.tau)
             for i in range(self.n_agents):
+                soft_update(self.critics_target[i], self.critics[i], self.tau)
                 soft_update(self.actors_target[i], self.actors[i], self.tau)
 
         return c_loss, a_loss
@@ -151,36 +145,17 @@ class MAAC:
             self.n_actions)
         FloatTensor = th.cuda.FloatTensor if self.use_cuda else th.FloatTensor
         for i in range(self.n_agents):
-
-
             sb = state_batch[i, :].detach()
             act = self.actors[i](sb.unsqueeze(0)).squeeze()
 
             act += th.from_numpy(
-                np.random.rand(self.n_actions) * self.var[i]).type(FloatTensor)
-
-            # summed to one
-            act /= act.sum()
+                np.random.randn(self.n_actions) * self.var[i]).type(FloatTensor)
 
             if self.episode_done > self.episodes_before_train and\
                self.var[i] > 0.05:
                 self.var[i] *= 0.999998
-            act = th.clamp(act, 0, 1.0)
+            act = th.clamp(act, -1.0, 1.0)
 
-            # random action part
-            act_i = np.random.choice(np.linspace(0, self.n_actions - 1, self.n_actions).astype(np.int16),
-                             p=act.detach().numpy())
-
-            # if it requires one hot vector encoding
-            _act = np.zeros((self.n_actions))
-            _act[act_i] = 1
-            act = th.from_numpy(_act)
-            actions[i, :] = act
-
-            # if random number is smaller than epsilon, do random action
-            if np.random.rand() < self.epsilon:
-                act = th.from_numpy(np.random.rand(self.n_actions))
-                act /= act.sum()
             actions[i, :] = act
         self.steps_done += 1
 

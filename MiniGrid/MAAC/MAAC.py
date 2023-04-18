@@ -24,7 +24,7 @@ def hard_update(target, source):
 
 class MAAC:
     def __init__(self, n_agents, dim_obs, dim_act, batch_size,
-                 capacity, episodes_before_train, epsilon=0.1):
+                 capacity, episodes_before_train):
         self.actors = [ActorMAAC(dim_obs, dim_act) for i in range(n_agents)]
         self.critics =Critic(n_agents, dim_obs,
                                dim_act)
@@ -41,7 +41,6 @@ class MAAC:
 
         self.GAMMA = 0.95
         self.tau = 0.01
-        self.epsilon = epsilon
 
         self.var = [1.0 for i in range(n_agents)]
         self.critic_optimizer = Adam(self.critics.parameters(),
@@ -105,12 +104,7 @@ class MAAC:
             target_Q = th.zeros(
                 self.batch_size).type(FloatTensor)                         # Target- Network 에서 온 Q-value
 
-            # target_Q[non_final_mask] = self.critics_target[agent](
-            #     non_final_next_states.view(-1, self.n_agents * self.n_states),
-            #     non_final_next_actions.view(-1,
-            #                                 self.n_agents * self.n_actions)
-            # ).squeeze()
-            target_Q[non_final_mask] = self.critics_target(
+            target_Q[non_final_mask] = self.critics_target[agent](
                 non_final_next_states.view(-1, self.n_agents * self.n_states),
                 non_final_next_actions.view(-1,
                                             self.n_agents * self.n_actions)
@@ -151,8 +145,6 @@ class MAAC:
             self.n_actions)
         FloatTensor = th.cuda.FloatTensor if self.use_cuda else th.FloatTensor
         for i in range(self.n_agents):
-
-
             sb = state_batch[i, :].detach()
             act = self.actors[i](sb.unsqueeze(0)).squeeze()
 
@@ -175,12 +167,6 @@ class MAAC:
             _act = np.zeros((self.n_actions))
             _act[act_i] = 1
             act = th.from_numpy(_act)
-            actions[i, :] = act
-
-            # if random number is smaller than epsilon, do random action
-            if np.random.rand() < self.epsilon:
-                act = th.from_numpy(np.random.rand(self.n_actions))
-                act /= act.sum()
             actions[i, :] = act
         self.steps_done += 1
 

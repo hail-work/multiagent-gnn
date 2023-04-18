@@ -38,9 +38,11 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--n_episode', type=int, default=20000)
 parser.add_argument('--max_steps', type=int, default=int(1e8))
-parser.add_argument('--episodes_before_train', type=int, default=1000)
+# parser.add_argument('--episodes_before_train', type=int, default=1000)
+parser.add_argument('--episodes_before_train', type=int, default=10)
 parser.add_argument('--capacity', type=int, default=1000000)
-parser.add_argument('--batch_size', type=int, default=100)
+# parser.add_argument('--batch_size', type=int, default=100)
+parser.add_argument('--batch_size', type=int, default=10)
 parser.add_argument('--wandb_name', type=str, default='maac')
 parser.add_argument('--epsilon', type=float, default=0.2)
 
@@ -70,7 +72,7 @@ win = None
 param = None
 
 magent = MAAC(n_agents, n_states, n_actions, batch_size, capacity,
-                episodes_before_train)
+                episodes_before_train, epsilon=epsilon)
 wandb.init(project="jin_0413",config=args.__dict__)
 wandb.run.name = args.wandb_name
 
