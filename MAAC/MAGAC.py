@@ -40,6 +40,7 @@ class MAFO_GAC: # Multi-Agent fully observable actorcritic
         #                        dim_act)
         self.actors_target = deepcopy(self.actors)
         self.critics_target = deepcopy(self.critics)
+        self.critics_gnn_target = deepcopy(self.critics_gnn)
         self.actors_gnn_target = deepcopy(self.actors_gnn)
         # self.actors_target_ = deepcopy(self.actors_)
         # self.critics_target_ = deepcopy(self.critics_)
@@ -63,6 +64,14 @@ class MAFO_GAC: # Multi-Agent fully observable actorcritic
                                      lr=0.001) for x in self.actors]
 
         if self.use_cuda:
+            for x in self.actors_gnn:
+                x.cuda()
+            for x in self.actors_gnn_target:
+                x.cuda()
+
+            self.critics_gnn.cuda()
+            self.critics_gnn_target.cuda()
+
             for x in self.actors:
                 x.cuda()
             self.critics.cuda()
@@ -119,6 +128,11 @@ class MAFO_GAC: # Multi-Agent fully observable actorcritic
             adj_ = th.stack(adj_)
             mask_ = th.stack(mask_)
 
+            if self.use_cuda:
+                x_ = x_.cuda()
+                adj_ = adj_.cuda()
+                mask_ = mask_.cuda()
+
             whole_state = self.critics_gnn(x_,adj_,mask_)
 
             # whole_state = state_batch.view(self.batch_size, -1)
@@ -144,6 +158,11 @@ class MAFO_GAC: # Multi-Agent fully observable actorcritic
                 x_ = th.stack(x_)
                 adj_ = th.stack(adj_)
                 mask_ = th.stack(mask_)
+
+                if self.use_cuda:
+                    x_ = x_.cuda()
+                    adj_ = adj_.cuda()
+                    mask_ = mask_.cuda()
 
                 next_state = self.actors_gnn_target[i](x_, adj_, mask_)
                 non_final_next_actions.append(
@@ -185,11 +204,16 @@ class MAFO_GAC: # Multi-Agent fully observable actorcritic
             adj_ = th.stack(adj_)
             mask_ = th.stack(mask_)
 
-            whole_next_state_ = self.critics_gnn(x_,adj_,mask_)
+            if self.use_cuda:
+                x_ = x_.cuda()
+                adj_ = adj_.cuda()
+                mask_ = mask_.cuda()
+
+            whole_next_state_ = self.critics_gnn_target(x_,adj_,mask_)
 
 
             # target_Q = self.critics_(whole_next_state_.view(self.batch_size,-1), whole_action.view(self.batch_size, -1)).squeeze()
-            target_Q[non_final_mask] = self.critics(whole_next_state_.view(self.batch_size,-1), non_final_next_actions.view(self.batch_size, -1)).squeeze()
+            target_Q[non_final_mask] = self.critics_target(whole_next_state_.view(self.batch_size,-1), non_final_next_actions.view(self.batch_size, -1)).squeeze()
 
 
             # target_Q[non_final_mask] = self.critics_target_(
@@ -217,6 +241,12 @@ class MAFO_GAC: # Multi-Agent fully observable actorcritic
 
             for i in range(self.batch_size):
                 x, adj, mask = getg_xadjmask(state_i[i,:,:], state_shape[2], state_shape[3])
+
+                if self.use_cuda:
+                    x = x.cuda()
+                    adj = adj.cuda()
+                    mask = mask.cuda()
+
                 state_ = self.actors_gnn[agent](x, adj, mask)
                 action_i.append(self.actors[agent](state_).squeeze(0))
 
@@ -255,6 +285,12 @@ class MAFO_GAC: # Multi-Agent fully observable actorcritic
 
             sb = state_batch[i, :].detach()
             x, adj, mask = getg_xadjmask(sb)
+
+            if self.use_cuda:
+                x = x.cuda()
+                adj = adj.cuda()
+                mask = mask.cuda()
+
             xx = self.actors_gnn[i](x,adj,mask)
 
             act = self.actors[i](xx).squeeze()
@@ -314,7 +350,7 @@ def getg_xadjmask(sb, x_size=10, y_size=10):
     for x in range(x_size):
             for y in range(y_size):
                 # print x, y
-                G.nodes[(x,y)]['x'] = sb.reshape(x_size, y_size,-1)[x, y].detach().numpy()
+                G.nodes[(x,y)]['x'] = sb.reshape(x_size, y_size,-1)[x, y].detach().to('cpu').numpy()
 
     pyg = from_networkx(G)
 

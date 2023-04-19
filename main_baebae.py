@@ -154,7 +154,7 @@ while True:
 		# make actions to be one-hot vectors
 		actions = np.eye(n_actions)[actions]
 
-		maddpg.memory.push(obs.data, th.from_numpy(np.stack(actions)).float(), next_obs, reward)
+		maddpg.memory.push(obs.data.to('cpu'), th.from_numpy(np.stack(actions)).float(), next_obs, reward)
 		obs = next_obs
 
 		c_loss, a_loss = maddpg.update_policy()
