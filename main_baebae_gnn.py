@@ -83,7 +83,7 @@ param = None
 
 maddpg = MAFO_GAC(n_agents, (*world.observation_space.shape[:-1],2), n_actions, batch_size, capacity,
 			  episodes_before_train, epsilon=args.eps)
-wandb.init(project="baebae_maac", config=args.__dict__)
+wandb.init(project="baebae_magac", config=args.__dict__)
 wandb.run.name = f"baebaerun_mafo"
 
 FloatTensor = th.cuda.FloatTensor if maddpg.use_cuda else th.FloatTensor

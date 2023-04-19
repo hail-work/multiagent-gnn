@@ -45,9 +45,9 @@ class MAAC:
 
         self.var = [1.0 for i in range(n_agents)]
         self.critic_optimizer = Adam(self.critics.parameters(),
-                                      lr=0.001)
+                                      lr=0.01)
         self.actor_optimizer = [Adam(x.parameters(),
-                                     lr=0.0001) for x in self.actors]
+                                     lr=0.001) for x in self.actors]
 
         if self.use_cuda:
             for x in self.actors:
