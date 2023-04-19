@@ -42,12 +42,13 @@ parser.add_argument('--n-agents', default=len(world.agents), type=int)
 parser.add_argument('--n-states', default=np.prod(world.observation_space.shape), type=int)
 parser.add_argument('--n-actions', default=7, type=int)
 parser.add_argument('--capacity', default=1000000, type=int)
-parser.add_argument('--batch-size', default=1000, type=int)
+parser.add_argument('--batch-size', default=10000, type=int)
 parser.add_argument('--n-episode', default=int(3e6), type=int)
 parser.add_argument('--max-steps', default=int(1e8), type=int)
 parser.add_argument('--episodes-before-train', default=10000, type=int)
 # add eps
-parser.add_argument('--eps', default=0.2, type=float)
+parser.add_argument('--eps', default=0.1, type=float)
+parser.add_argument('--save-vid-every', default=int(1e5), type=int)
 args = parser.parse_args()
 
 world.reset()
@@ -61,26 +62,18 @@ n_episode = args.n_episode
 max_steps = args.max_steps
 episodes_before_train = args.episodes_before_train
 
-# n_agents = len(world.agents)
-# n_states = np.prod(world.observation_space.shape) #TODO 이것도 수정했습니다.
-# n_actions = world.action_space.n
-# capacity = 1000000
-# batch_size = 1000
-# n_episode = int(3e6)
-# max_steps = 1000
-# episodes_before_train = 100
 
 win = None
 param = None
 
 maddpg = MAAC(n_agents, n_states, n_actions, batch_size, capacity,
 			  episodes_before_train, epsilon=args.eps)
-wandb.init(project="baebae_0409", config=args.__dict__)
+wandb.init(project="baebae_maac", config=args.__dict__)
 wandb.run.name = f"baebaerun_maac"
 
 FloatTensor = th.cuda.FloatTensor if maddpg.use_cuda else th.FloatTensor
 # for i_episode in range(n_episode):
-i_episode = -1
+i_episode = 0
 while True:
 	obs = world.reset()
 	obs = np.stack(obs)
@@ -96,7 +89,7 @@ while True:
 	t = 0
 
 	# open a file that named "video_{i_episode}.mp4" and to save video
-	if (i_episode+1) % 100 == 0 and e_render:
+	if (i_episode+1) % args.save_vid_every == 0 and e_render:
 		# Create a VideoWriter object
 		fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # codec
 		out = cv2.VideoWriter(f'output_{i_episode}.mp4', fourcc, 20.0, (640, 480))  # output file name, codec, fps, resolution
@@ -106,7 +99,7 @@ while True:
 		log = {}
 
 		# save video for every 100 episodes
-		if (i_episode+1) % 100 == 0 and e_render:
+		if (i_episode+1) % args.save_vid_every == 0 and e_render:
 			frame = world.render()
 			# write a video frame to out file
 			out.write(frame)
@@ -135,9 +128,11 @@ while True:
 			done = True
 			# if they decided to finish the episode before the best possible reward
 			if total_reward_idx.sum() != len(world.agents)*2:
-				reward -= 2
+				reward -= 2 # this is for not to quit before it collect all
 			else:
 				pass
+		if total_reward_idx.sum() == len(world.agents)*2: # if it collected all
+			done = True
 
 
 		reward = np.stack(reward)
@@ -151,7 +146,7 @@ while True:
 			next_obs = None
 
 		# subtract reward with t*1e-3
-		reward = reward - t * 1e-8
+		reward = reward - t * 1e-7
 
 		total_reward += reward.sum()
 		rr += reward.cpu().numpy()
@@ -180,7 +175,6 @@ while True:
 		log['t/reward'] = reward.sum()
 		if reward.sum() > 0:
 			print('reward: ', reward.sum())
-		wandb.log(log)
 
 		# add reward, c_loss, a_loss to log
 		log['t/reward'] = reward.sum()
@@ -204,7 +198,7 @@ while True:
 			break
 
 	# open a file that named "video_{i_episode}.mp4" and to save video
-	if (i_episode+1) % 100 == 0 and e_render:
+	if (i_episode+1) % args.save_vid_every == 0 and e_render:
 		# Release the resources
 		out.release()
 		cv2.destroyAllWindows()
@@ -215,8 +209,9 @@ while True:
 	reward_record.append(total_reward)
 	log['episode/reward'] = reward.sum()
 	log['episode/tot_reward'] = total_reward
-	log['episode/c_loss']=total_c_loss
-	log['episode/a_loss']=total_a_loss
+	if not np.isnan(total_c_loss):
+		log['episode/c_loss']=total_c_loss
+		log['episode/a_loss']=total_a_loss
 	wandb.log(log)
 	if maddpg.episode_done == maddpg.episodes_before_train:
 		print('training now begins...')

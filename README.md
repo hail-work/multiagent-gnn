@@ -9,3 +9,4 @@ pip install pyproject-toml
 - cmake
 - magent2==0.3.0
 - pettingzoo==1.22.0
+- matplotlib==3.5

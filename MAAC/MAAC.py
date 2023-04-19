@@ -52,12 +52,14 @@ class MAAC:
         if self.use_cuda:
             for x in self.actors:
                 x.cuda()
-            for x in self.critics:
-                x.cuda()
+            self.critics.cuda()
+            # for x in self.critics:
+                # x.cuda()
             for x in self.actors_target:
                 x.cuda()
-            for x in self.critics_target:
-                x.cuda()
+            self.critics_target.cuda()
+            # for x in self.critics_target:
+            #     x.cuda()
 
         self.steps_done = 0
         self.episode_done = 0
@@ -169,7 +171,7 @@ class MAAC:
 
             # random action part
             act_i = np.random.choice(np.linspace(0, self.n_actions - 1, self.n_actions).astype(np.int16),
-                             p=act.detach().numpy())
+                             p=act.to('cpu').detach().numpy())
 
             # if it requires one hot vector encoding
             _act = np.zeros((self.n_actions))
