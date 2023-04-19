@@ -26,7 +26,7 @@ class MAAC:
     def __init__(self, n_agents, dim_obs, dim_act, batch_size,
                  capacity, episodes_before_train, epsilon=0.1):
         self.actors = [ActorMAAC(dim_obs, dim_act) for i in range(n_agents)]
-        self.critics =Critic(n_agents, dim_obs,
+        self.critics = Critic(n_agents, dim_obs,
                                dim_act)
         self.actors_target = deepcopy(self.actors)
         self.critics_target = deepcopy(self.critics)
