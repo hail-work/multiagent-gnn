@@ -27,7 +27,7 @@ class Critic(nn.Module):
         result = F.relu(self.FC0(obs))
         combined = th.cat([result, acts], 1)
         result = F.relu(self.FC1(combined))
-        result = F.relu(self.FC2(combined))
+        result = F.relu(self.FC2(result))
         result = F.relu(self.FC3(result))
 
         return self.FC5(F.relu(self.FC4(result)))
@@ -37,7 +37,7 @@ class Actor(nn.Module):
     def __init__(self, dim_observation, dim_action):
         super(Actor, self).__init__()
         self.FC0 = nn.Linear(dim_observation, 2048)
-        self.FC2 = nn.Linear(2048, 1024)
+        self.FC1 = nn.Linear(2048, 1024)
         self.FC2 = nn.Linear(1024, 512)
         self.FC3 = nn.Linear(512, 128)
         self.FC4 = nn.Linear(128, dim_action)
@@ -47,7 +47,8 @@ class Actor(nn.Module):
         result = F.relu(self.FC0(obs))
         result = F.relu(self.FC1(result))
         result = F.relu(self.FC2(result))
-        result = F.tanh(self.FC3(result))
+        result = F.relu(self.FC3(result))
+        result = F.tanh(self.FC4(result))
         return result
 
 class PerceptGNN(nn.Module):
