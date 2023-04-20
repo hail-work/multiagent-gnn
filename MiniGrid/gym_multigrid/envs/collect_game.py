@@ -33,7 +33,7 @@ class CollectGameEnv(MultiGridEnv):
             grid_size=size,
             width=width,
             height=height,
-            max_steps= 10000,
+            max_steps= 1000,
             # Set this to True for maximum speed
             see_through_walls=False,
             agents=agents,
