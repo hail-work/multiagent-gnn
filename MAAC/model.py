@@ -170,6 +170,50 @@ class SGCritic(nn.Module):
         result = th.cat([obs, acts], 1)
         return self.FC2(F.relu(self.FC1(result)))
 
+
+class SAGEGActor(nn.Module):
+    def __init__(self,observation_shape, dim_action):
+        super(SAGEGActor, self).__init__()
+        self.gnn1 = DenseSAGEConv(observation_shape[-1], 128)
+        self.gnn2 = DenseSAGEConv(128, 64)
+        self.dim_observation = 64 * np.prod(observation_shape[:-1])
+        self.FC1 = nn.Linear(64 * np.prod(observation_shape[:-1]), dim_action)
+
+    # action output between -2 and 2
+    def forward(self, x, adj, mask = None):
+        # x = self.gnn0(x, adj, mask)
+        x = self.gnn1(x, adj, mask)
+        x = self.gnn2(x, adj)
+        x = F.elu(x) # exponential linear unit
+
+        obs = x.view(-1, self.dim_observation)
+        result = F.relu(self.FC1(obs))
+        return result
+
+class SAGEGCritic(nn.Module):
+    def __init__(self, n_agent, observation_shape, dim_action):
+        super(SAGEGCritic, self).__init__()
+        self.n_agent = n_agent
+
+        # self.gnn0 = DenseSAGEConv(observation_shape[-1], 512, normalize=True)
+        self.gnn1 = DenseSAGEConv(observation_shape[-1], 128)
+        self.gnn2 = DenseSAGEConv(128, 64)
+        self.dim_observation = 64 * np.prod(observation_shape[:-1])
+        self.dim_action = dim_action
+        obs_dim = self.dim_observation
+        act_dim = self.dim_action * n_agent
+        self.FC1 = nn.Linear(obs_dim+act_dim, 128)
+        self.FC2 = nn.Linear(128, 1)
+
+    # obs: batch_size * obs_dim
+    def forward(self, acts, x, adj, mask = None, ):
+        x = self.gnn1(x, adj, mask)
+        x = self.gnn2(x, adj)
+        x = F.elu(x) # exponential linear unit
+        # flatten obs
+        obs = x.view(-1, self.dim_observation)
+        result = th.cat([obs, acts], 1)
+        return self.FC2(F.relu(self.FC1(result)))
 class ActorMAAC(nn.Module):
     def __init__(self, dim_observation, dim_action):
         super(ActorMAAC, self).__init__()
