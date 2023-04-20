@@ -10,6 +10,7 @@ from .params import scale_reward
 from torch_geometric.utils.convert import from_networkx
 from torch_geometric.utils import to_dense_adj, to_dense_batch
 from torch_geometric.utils import to_networkx
+import networkx as nx
 
 def soft_update(target, source, t):
     for target_param, source_param in zip(target.parameters(),
@@ -113,18 +114,7 @@ class MAFO_GAC: # Multi-Agent fully observable actorcritic
             whole_state_ = state_batch.unsqueeze(-1).swapaxes(1,-1).squeeze(1).reshape(state_shape[0],state_shape[2]*state_shape[3],state_shape[1]*state_shape[4])
 
             # set x_ that to be append
-            x_ = []
-            adj_ = []
-            mask_ = []
-            for i in range(self.batch_size):
-                x, adj, mask = getg_xadjmask(whole_state_[i,:,:], state_shape[2], state_shape[3])
-                # append x_
-                x_.append(x.squeeze(0))
-                adj_.append(adj.squeeze(0))
-                mask_.append(mask.squeeze(0))
-            x_cc = th.stack(x_)
-            adj_cc = th.stack(adj_)
-            mask_cc = th.stack(mask_)
+            x_cc, adj_cc, mask_cc = getg_xadjmask_batch(whole_state_, state_shape[2], state_shape[3])
 
             if self.use_cuda:
                 x_cc = x_cc.cuda()
@@ -144,18 +134,7 @@ class MAFO_GAC: # Multi-Agent fully observable actorcritic
             non_final_next_actions = []
             for i in range(self.n_agents):
                 # set x_ that to be append
-                x_ = []
-                adj_ = []
-                mask_ = []
-                for j in range(self.batch_size):
-                    x, adj, mask = getg_xadjmask(non_final_next_states_[j,:,:], state_shape[2], state_shape[3])
-                    # append x_
-                    x_.append(x.squeeze(0))
-                    adj_.append(adj.squeeze(0))
-                    mask_.append(mask.squeeze(0))
-                x_ = th.stack(x_)
-                adj_ = th.stack(adj_)
-                mask_ = th.stack(mask_)
+                x_, adj_, mask_ = getg_xadjmask_batch(non_final_next_states_, state_shape[2], state_shape[3])
 
                 if self.use_cuda:
                     x_ = x_.cuda()
@@ -190,18 +169,7 @@ class MAFO_GAC: # Multi-Agent fully observable actorcritic
             next_state_ = non_final_next_states.unsqueeze(-1).swapaxes(1,-1).squeeze(1).reshape(state_shape[0],state_shape[2]*state_shape[3],state_shape[1]*state_shape[4])
 
             # set x_ that to be append
-            x_ = []
-            adj_ = []
-            mask_ = []
-            for i in range(self.batch_size):
-                x, adj, mask = getg_xadjmask(next_state_[i,:,:], state_shape[2], state_shape[3])
-                # append x_
-                x_.append(x.squeeze(0))
-                adj_.append(adj.squeeze(0))
-                mask_.append(mask.squeeze(0))
-            x_ = th.stack(x_)
-            adj_ = th.stack(adj_)
-            mask_ = th.stack(mask_)
+            x_, adj_, mask_ = getg_xadjmask_batch(next_state_, state_shape[2], state_shape[3])
 
             if self.use_cuda:
                 x_ = x_.cuda()
@@ -318,6 +286,42 @@ class MAFO_GAC: # Multi-Agent fully observable actorcritic
 
         return actions
 
+def getg_xadjmask_batch(sbs, x_size=10,y_size=10):
+    x_ = th.Tensor(0,x_size*y_size,sbs.shape[-1])
+    adj_ = th.Tensor(0,x_size*y_size,x_size*y_size)
+    mask_ = th.Tensor(0,x_size*y_size)
+
+    for sb in sbs:
+        x_size = np.sqrt(sb.shape[0]).astype(np.int16)
+        y_size = np.sqrt(sb.shape[0]).astype(np.int16)
+
+        G = nx.grid_2d_graph(x_size, y_size)
+        G.add_edges_from([edge for edge in G.edges], weight=1)
+        G.add_edges_from([
+                             ((x, y), (x + 1, y + 1))
+                             for x in range(x_size - 1)
+                             for y in range(y_size - 1)
+                         ] + [
+                             ((x + 1, y), (x, y + 1))
+                             for x in range(x_size - 1)
+                             for y in range(y_size - 1)
+                         ], weight=1.4)
+        for node in G.nodes:
+            G.nodes[node]['x'] = sb.reshape(x_size, y_size, -1)[node[0], node[1]].detach().numpy()
+
+        pyg = from_networkx(G)
+
+        x = pyg.x.view(1, x_size*y_size, -1)
+        adj = to_dense_adj(pyg.edge_index, max_num_nodes=pyg.num_nodes)
+        # make mask that is filled with True
+        mask = np.ones((x_size, y_size))
+        mask = th.Tensor(mask.reshape(1, -1))
+
+        x_ = th.cat((x_, x), dim=0)
+        adj_ = th.cat((adj_, adj), dim=0)
+        mask_ = th.cat((mask_, mask), dim=0)
+    return x_, adj_, mask_
+
 def getg_xadjmask(sb, x_size=10, y_size=10):
     # x_size = np.sqrt(sb.shape[0]/2).astype(np.int16)
     # y_size = np.sqrt(sb.shape[0]/2).astype(np.int16)
@@ -355,6 +359,45 @@ def getg_xadjmask(sb, x_size=10, y_size=10):
     return x, adj, mask
 
 if __name__=="__main__":
+    x_ = th.Tensor(0,100,6)
+    adj_ = th.Tensor(0,100,100)
+    mask_ = th.Tensor(0,100)
+
+    sbs = th.Tensor(np.zeros((2,100,6)))
+
+    for sb in sbs:
+        x_size = np.sqrt(sb.shape[0]).astype(np.int16)
+        y_size = np.sqrt(sb.shape[0]).astype(np.int16)
+
+        import networkx as nx
+        G = nx.grid_2d_graph(x_size, y_size)
+        G.add_edges_from([edge for edge in G.edges], weight=1)
+        G.add_edges_from([
+                             ((x, y), (x + 1, y + 1))
+                             for x in range(x_size - 1)
+                             for y in range(y_size - 1)
+                         ] + [
+                             ((x + 1, y), (x, y + 1))
+                             for x in range(x_size - 1)
+                             for y in range(y_size - 1)
+                         ], weight=1.4)
+        for node in G.nodes:
+            G.nodes[node]['x'] = sb.reshape(x_size, y_size, -1)[node[0], node[1]].detach().numpy()
+
+        pyg = from_networkx(G)
+
+        x = pyg.x.view(1, x_size*y_size, -1)
+        adj = to_dense_adj(pyg.edge_index, max_num_nodes=pyg.num_nodes)
+        # make mask that is filled with True
+        mask = np.ones((x_size, y_size))
+        mask = th.Tensor(mask.reshape(1, -1))
+
+        x_ = th.cat((x_, x), dim=0)
+        adj_ = th.cat((adj_, adj), dim=0)
+        mask_ = th.cat((mask_, mask), dim=0)
+
+
+if __name__=="__main2__":
     sb = th.Tensor(np.zeros(200))
     x_size = np.sqrt(sb.shape[0]/2).astype(np.int16)
     y_size = np.sqrt(sb.shape[0]/2).astype(np.int16)
