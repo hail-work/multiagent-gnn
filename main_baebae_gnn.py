@@ -8,6 +8,7 @@ from gym.envs.registration import register
 import gym
 import argparse
 import cv2
+from tqdm import tqdm
 
 
 def obs_to_fobs(obs):
@@ -89,7 +90,7 @@ wandb.run.name = f"baebaerun_mafo_small"
 FloatTensor = th.cuda.FloatTensor if maddpg.use_cuda else th.FloatTensor
 # for i_episode in range(n_episode):
 i_episode = 0
-while True:
+for i_episode in tqdm(range(n_episode)):
 	obs = world.reset()
 	_fobs = obs_to_fobs(obs)
 	if isinstance(_fobs, np.ndarray):

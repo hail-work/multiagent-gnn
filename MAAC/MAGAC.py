@@ -28,20 +28,19 @@ class MAFO_GAC: # Multi-Agent fully observable actorcritic
     def __init__(self, n_agents, observation_shape, dim_act, batch_size,
                  capacity, episodes_before_train, epsilon=0.1):
         dim_obs = np.prod(observation_shape)
-        self.actors_gnn = [PerceptGNN(observation_shape) for i in range(n_agents)]
-        # self.actors = [GActor(dim_obs, dim_act, self.actors_gnn[i]) for i in range(n_agents)]
-        self.actors = [GActor(self.actors_gnn[0].out_size, dim_act) for i in range(n_agents)]
-        # self.actors = [ActorMAAC(dim_obs, dim_act) for i in range(n_agents)]
+        # self.actors_gnn = [PerceptGNN(observation_shape) for i in range(n_agents)]
+        self.actors = [GActor(observation_shape, dim_act) for i in range(n_agents)]
 
-        self.critics_gnn = PerceptGNN((*observation_shape[:2],n_agents*observation_shape[2]))
-        self.critics = GCritic(n_agents, self.critics_gnn.out_size,
+        # self.critics_gnn = PerceptGNN((*observation_shape[:2],n_agents*observation_shape[2]))
+        # self.critics_gnn = PerceptGNN((*observation_shape[:2],n_agents*observation_shape[2]))
+        self.critics = GCritic(n_agents, (*observation_shape[:2],n_agents*observation_shape[2]),
                                dim_act)
         # self.critics = Critic(n_agents, dim_obs,
         #                        dim_act)
         self.actors_target = deepcopy(self.actors)
         self.critics_target = deepcopy(self.critics)
-        self.critics_gnn_target = deepcopy(self.critics_gnn)
-        self.actors_gnn_target = deepcopy(self.actors_gnn)
+        # self.critics_gnn_target = deepcopy(self.critics_gnn)
+        # self.actors_gnn_target = deepcopy(self.actors_gnn)
         # self.actors_target_ = deepcopy(self.actors_)
         # self.critics_target_ = deepcopy(self.critics_)
 
@@ -64,13 +63,12 @@ class MAFO_GAC: # Multi-Agent fully observable actorcritic
                                      lr=0.001) for x in self.actors]
 
         if self.use_cuda:
-            for x in self.actors_gnn:
-                x.cuda()
-            for x in self.actors_gnn_target:
-                x.cuda()
-
-            self.critics_gnn.cuda()
-            self.critics_gnn_target.cuda()
+            # for x in self.actors_gnn:
+            #     x.cuda()
+            # for x in self.actors_gnn_target:
+            #     x.cuda()
+            # self.critics_gnn.cuda()
+            # self.critics_gnn_target.cuda()
 
             for x in self.actors:
                 x.cuda()
@@ -124,22 +122,22 @@ class MAFO_GAC: # Multi-Agent fully observable actorcritic
                 x_.append(x.squeeze(0))
                 adj_.append(adj.squeeze(0))
                 mask_.append(mask.squeeze(0))
-            x_ = th.stack(x_)
-            adj_ = th.stack(adj_)
-            mask_ = th.stack(mask_)
+            x_cc = th.stack(x_)
+            adj_cc = th.stack(adj_)
+            mask_cc = th.stack(mask_)
 
             if self.use_cuda:
-                x_ = x_.cuda()
-                adj_ = adj_.cuda()
-                mask_ = mask_.cuda()
+                x_cc = x_cc.cuda()
+                adj_cc = adj_cc.cuda()
+                mask_cc = mask_cc.cuda()
 
-            whole_state = self.critics_gnn(x_,adj_,mask_)
-
+            # whole_state = self.critics_gnn(x_,adj_,mask_)
             # whole_state = state_batch.view(self.batch_size, -1)
             whole_action = action_batch.view(self.batch_size, -1)
             self.critic_optimizer.zero_grad()
             # current_Q = self.critics(whole_state, whole_action)      # Critic에서 온 Q-value
-            current_Q = self.critics(whole_state.view(self.batch_size,-1), whole_action)
+            # current_Q = self.critics(whole_state.view(self.batch_size,-1), whole_action)
+            current_Q = self.critics(whole_action, x_cc,adj_cc,mask_cc)
 
             non_final_next_states_ = non_final_next_states[:, 0, :].reshape(self.batch_size, -1, state_shape[-1])
 
@@ -164,12 +162,13 @@ class MAFO_GAC: # Multi-Agent fully observable actorcritic
                     adj_ = adj_.cuda()
                     mask_ = mask_.cuda()
 
-                next_state = self.actors_gnn_target[i](x_, adj_, mask_)
+                # next_state = self.actors_gnn_target[i](x_, adj_, mask_)
+                # non_final_next_actions.append(
+                #     self.actors_target[i](next_state)
+                # )
                 non_final_next_actions.append(
-                    self.actors_target[i](next_state)
+                    self.actors_target[i](x_, adj_, mask_)
                 )
-
-
             # non_final_next_actions = [
             #     self.actors_target_[i](non_final_next_states[:,
             #                                                 i,
@@ -209,11 +208,10 @@ class MAFO_GAC: # Multi-Agent fully observable actorcritic
                 adj_ = adj_.cuda()
                 mask_ = mask_.cuda()
 
-            whole_next_state_ = self.critics_gnn_target(x_,adj_,mask_)
-
-
+            # whole_next_state_ = self.critics_gnn_target(x_,adj_,mask_)
             # target_Q = self.critics_(whole_next_state_.view(self.batch_size,-1), whole_action.view(self.batch_size, -1)).squeeze()
-            target_Q[non_final_mask] = self.critics_target(whole_next_state_.view(self.batch_size,-1), non_final_next_actions.view(self.batch_size, -1)).squeeze()
+            # target_Q[non_final_mask] = self.critics_target(whole_next_state_.view(self.batch_size,-1), non_final_next_actions.view(self.batch_size, -1)).squeeze()
+            target_Q[non_final_mask] = self.critics_target(non_final_next_actions.view(self.batch_size, -1), x_,adj_,mask_).squeeze()
 
 
             # target_Q[non_final_mask] = self.critics_target_(
@@ -227,7 +225,7 @@ class MAFO_GAC: # Multi-Agent fully observable actorcritic
                 reward_batch[:, agent].unsqueeze(1) * scale_reward)
 
             loss_Q = nn.MSELoss()(current_Q, target_Q.detach())            # Critic-Loss
-            loss_Q.backward(retain_graph=True)
+            loss_Q.backward()
             # self.critic_optimizer.step()
             self.critic_optimizer.step()
 
@@ -247,8 +245,8 @@ class MAFO_GAC: # Multi-Agent fully observable actorcritic
                     adj = adj.cuda()
                     mask = mask.cuda()
 
-                state_ = self.actors_gnn[agent](x, adj, mask)
-                action_i.append(self.actors[agent](state_).squeeze(0))
+                # state_ = self.actors_gnn[agent](x, adj, mask)
+                action_i.append(self.actors[agent](x, adj, mask).squeeze(0))
 
             action_i = th.stack(action_i)
             # action_i = self.actors_[agent](state_i)
@@ -256,7 +254,7 @@ class MAFO_GAC: # Multi-Agent fully observable actorcritic
             ac[:, agent, :] = action_i
             whole_action = ac.view(self.batch_size, -1)
             # actor_loss = -self.critics(whole_state, whole_action)
-            actor_loss = -self.critics(whole_state, whole_action)
+            actor_loss = -self.critics(whole_action, x_cc,adj_cc,mask_cc)
             actor_loss = actor_loss.mean()
             actor_loss.backward()
             # self.actor_optimizer[agent].step()
@@ -265,11 +263,8 @@ class MAFO_GAC: # Multi-Agent fully observable actorcritic
             a_loss.append(actor_loss)
 
         if self.steps_done % 100 == 0 and self.steps_done > 0:
-            # TODO update and remove
-            # soft_update(self.critics_target, self.critics, self.tau)
             soft_update(self.critics_target, self.critics, self.tau)
             for i in range(self.n_agents):
-                # soft_update(self.actors_target[i], self.actors[i], self.tau)
                 soft_update(self.actors_target[i], self.actors[i], self.tau)
 
         return c_loss, a_loss
@@ -291,10 +286,7 @@ class MAFO_GAC: # Multi-Agent fully observable actorcritic
                 adj = adj.cuda()
                 mask = mask.cuda()
 
-            xx = self.actors_gnn[i](x,adj,mask)
-
-            act = self.actors[i](xx).squeeze()
-            # act = self.actors[i](sb.unsqueeze(0)).squeeze()
+            act = self.actors[i](x,adj,mask).squeeze()
 
             act += th.from_numpy(
                 np.random.rand(self.n_actions) * self.var[i]).type(FloatTensor)
