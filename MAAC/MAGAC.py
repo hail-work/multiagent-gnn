@@ -307,7 +307,7 @@ def getg_xadjmask_batch(sbs, x_size=10,y_size=10):
                              for y in range(y_size - 1)
                          ], weight=1.4)
         for node in G.nodes:
-            G.nodes[node]['x'] = sb.reshape(x_size, y_size, -1)[node[0], node[1]].detach().numpy()
+            G.nodes[node]['x'] = sb.reshape(x_size, y_size, -1)[node[0], node[1]].detach().cpu().numpy()
 
         pyg = from_networkx(G)
 

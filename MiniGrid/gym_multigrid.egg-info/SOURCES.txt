@@ -1,6 +1,16 @@
+.gitignore
+GridMain_.py
 LICENSE
 README.md
 setup.py
+test.py
+test_env.py
+figures/collect.png
+figures/collect_2.png
+figures/soccer.png
+figures/soccer_2.png
+figures/soccer_3.png
+figures/soccer_4.png
 gym_multigrid/__init__.py
 gym_multigrid/multigrid.py
 gym_multigrid/rendering.py
@@ -13,3 +23,5 @@ gym_multigrid.egg-info/top_level.txt
 gym_multigrid/envs/__init__.py
 gym_multigrid/envs/collect_game.py
 gym_multigrid/envs/soccer_game.py
+wandb/debug-cli.dongjaekim.log
+wandb/settings
