@@ -55,11 +55,11 @@ parser.add_argument('--n-agents', default=len(world.agents), type=int)
 parser.add_argument('--n-states', default=np.prod([*world.observation_space.shape[:2],2]), type=int)
 parser.add_argument('--n-actions', default=7, type=int)
 parser.add_argument('--capacity', default=1000000, type=int)
-parser.add_argument('--batch-size', default=10000, type=int)
+parser.add_argument('--batch-size', default=1000, type=int)
 # parser.add_argument('--batch-size', default=2, type=int)
 parser.add_argument('--n-episode', default=int(3e6), type=int)
 parser.add_argument('--max-steps', default=int(1e8), type=int)
-parser.add_argument('--episodes-before-train', default=10000, type=int)
+parser.add_argument('--episodes-before-train', default=1000, type=int)
 # parser.add_argument('--episodes-before-train', default=2, type=int)
 # add eps
 parser.add_argument('--eps', default=0.1, type=float)
@@ -84,7 +84,7 @@ param = None
 maddpg = MAFO_GAC(n_agents, (*world.observation_space.shape[:-1],2), n_actions, batch_size, capacity,
 			  episodes_before_train, epsilon=args.eps)
 wandb.init(project="baebae_magac", config=args.__dict__)
-wandb.run.name = f"baebaerun_mafo"
+wandb.run.name = f"baebaerun_mafo_small"
 
 FloatTensor = th.cuda.FloatTensor if maddpg.use_cuda else th.FloatTensor
 # for i_episode in range(n_episode):
