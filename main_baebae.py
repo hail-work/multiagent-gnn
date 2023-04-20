@@ -132,6 +132,7 @@ while True:
 			else:
 				pass
 		if total_reward_idx.sum() == len(world.agents)*2: # if it collected all
+			reward += 10/3
 			done = True
 
 
